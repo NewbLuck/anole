@@ -2,7 +2,9 @@ const std = @import("std");
 
 const xcb = @import("zig-xcb.zig");
 const demo = @import("demo.zig");
+const c = std.c;
 
+const stb = @import("stb");
 
 pub fn print(text:[]const u8) void {
     std.debug.print("{s}\n",.{text});
@@ -12,6 +14,78 @@ pub fn runIt() anyerror!void {
     //try demo.demo();
 
     var screen_num:usize = 0;
+
+    var ffile:?*c.FILE = c.fopen("/home/scott/Desktop/anole/src/font/test.ttf","rb");
+    if(ffile) |file| {
+        var fb = std.testing.allocator.alloc(u8,455188) catch unreachable;
+        _=c.fread(@ptrCast([*]u8,fb), 455188, 1, file);
+        _=c.fclose(file);
+        var info:stb.stbtt_fontinfo = undefined;
+
+        var rval = stb.stbtt_InitFont(&info, fb.ptr, 0);
+        if (rval == 0) {
+            std.debug.print("failed {} \n",.{rval});
+            return error.FailedInitializingFont;
+        }
+
+        var b_w:i32 = 512; // bitmap width
+        var b_h:i32 = 128; // bitmap height
+        var l_h:i32 = 64;  // line height
+
+        var bitmap:[]u8 = std.testing.allocator.alloc(u8,@intCast(usize,b_w * b_h)) catch unreachable;
+        var scale:f32 = stb.stbtt_ScaleForPixelHeight(&info, @intToFloat(f32,l_h));
+        var word:[]const u8 = "the quick brown fox";
+
+        var x:i32 = 0;
+        var ascent:i32 = 0;
+        var descent:i32 = 0;
+        var lineGap:i32 = 0;
+        _=stb.stbtt_GetFontVMetrics(&info, &ascent, &descent, &lineGap);
+
+        ascent = @floatToInt(i32,std.math.round(@intToFloat(f32,ascent) * scale));
+        descent = @floatToInt(i32,std.math.round(@intToFloat(f32,descent) * scale));
+
+        var i:u32 = 0;
+        while(i < word.len - 1) : (i += 1) {
+            // how wide is this character
+            var ax:i32 = 0;
+            var lsb:i32 = 0;
+            _=stb.stbtt_GetCodepointHMetrics(&info, word[i], &ax, &lsb);
+            // (Note that each Codepoint call has an alternative Glyph version which caches the work required to lookup the character word[i].) 
+
+            // get bounding box for character (may be offset to account for chars that dip above or below the line */
+            var c_x1:i32 = 0;
+            var c_y1:i32 = 0;
+            var c_x2:i32 = 0;
+            var c_y2:i32 = 0;
+            _=stb.stbtt_GetCodepointBitmapBox(&info, word[i], scale, scale, &c_x1, &c_y1, &c_x2, &c_y2);
+            
+            // compute y (different characters have different heights */
+            var y:i32 = ascent + c_y1;
+            
+            // render character (stride and offset is important here) */
+            var byteOffset:i32 = x + @floatToInt(i32,std.math.round(@intToFloat(f32,lsb) * scale)) + (y * b_w);
+            _=stb.stbtt_MakeCodepointBitmap(&info, &bitmap[@intCast(usize,byteOffset)], c_x2 - c_x1, c_y2 - c_y1, b_w, scale, scale, word[i]);
+
+            // advance x */
+            x += @floatToInt(i32,std.math.round(@intToFloat(f32,ax) * scale));
+            
+            // add kerning */
+            var kern:i32 = stb.stbtt_GetCodepointKernAdvance(&info, word[i], word[i + 1]);
+            x += @floatToInt(i32,std.math.round(@intToFloat(f32,kern) * scale));
+        }
+
+        // DO SOMETHING WITH THE BITMAP, DUMP TO SCREEN
+
+        // Note that this example writes each character directly into the target image buffer.
+        // The "right thing" to do for fonts that have overlapping characters is
+        // MakeCodepointBitmap to a temporary buffer and then alpha blend that onto the target image.
+        // See the stb_truetype.h header for more info.
+        std.testing.allocator.free(fontBuffer);
+        std.testing.allocator.free(bitmap);        
+
+    }
+
 
     print("Connecting...");
     if(xcb.connect(null,&screen_num)) |conn| {

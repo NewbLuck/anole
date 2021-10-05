@@ -15,8 +15,16 @@ pub fn build(b: *std.build.Builder) void {
 
     exe.linkLibC();
     //exe.linkSystemLibrary("X11");
+    
+    exe.addIncludeDir("deps/stb");
+    const lib_cflags = &[_][]const u8{"-std=c99"};
+    exe.addCSourceFile("deps/stb/stb_impl.c", lib_cflags);
+    exe.addPackage(.{
+        .name = "stb",
+        .path = std.build.FileSource{ .path = "deps/stb/stb_tt.zig" }
+    });
+
     exe.linkSystemLibrary("xcb");
-    exe.linkSystemLibrary("freetype");
     exe.linkSystemLibrary("fontconfig");
 
     exe.setTarget(target);

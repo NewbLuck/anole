@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const c = @import("xcbft.zig");
+pub const c = @import("xcb.zig");
 
 pub const Connection = c.xcb_connection_t;
 pub const Screen = c.xcb_screen_t;
